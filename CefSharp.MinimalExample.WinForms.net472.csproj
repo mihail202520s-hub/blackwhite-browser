@@ -1,0 +1,75 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <!-- Note: We cannot use the recommended style of specifying <Project Sdk=...> because we need
+       to set BaseIntermediateOutputPath and BaseOutputPath before the SDK props are imported. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>obj.net472\</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin.net472\</BaseOutputPath>
+  </PropertyGroup>
+
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk.WindowsDesktop" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>CefSharp.MinimalExample.WinForms</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Platforms>x86;x64;AnyCPU</Platforms>
+    <ProjectGuid>{1D1D63D1-5257-4AA0-A284-7EF4574878CB}</ProjectGuid>
+    <StartupObject>CefSharp.MinimalExample.WinForms.Program</StartupObject>
+    <ApplicationIcon>chromium-256.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Platform)' == 'AnyCPU'">
+    <DefineConstants>$(DefineConstants);ANYCPU</DefineConstants>
+    <!--
+    For versions 87 and 88 specify CefSharpPlatformTargetOverride when using AnyCPU.
+    For versions 89 and above use PlatformTarget (CefSharpPlatformTargetOverride will also still work)
+    -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <!--<CefSharpPlatformTargetOverride>AnyCPU</CefSharpPlatformTargetOverride>-->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="bin.netcore\**" />
+    <Compile Remove="bin\**" />
+    <Compile Remove="obj.netcore\**" />
+    <Compile Remove="obj\**" />
+    <EmbeddedResource Remove="bin.netcore\**" />
+    <EmbeddedResource Remove="bin\**" />
+    <EmbeddedResource Remove="obj.netcore\**" />
+    <EmbeddedResource Remove="obj\**" />
+    <None Remove="bin.netcore\**" />
+    <None Remove="bin\**" />
+    <None Remove="obj.netcore\**" />
+    <None Remove="obj\**" />
+  
+    <Compile Remove="Program.PublishSingleFile.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="packages.config" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="chromium-256.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CefSharp.WinForms" Version="151.3.240" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="crash_reporter.cfg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk.WindowsDesktop" />
+
+  <Target Name="CefSharpAfterBuildDebug" AfterTargets="AfterBuild">
+    <CallTarget Targets="CefSharpAfterBuildDiagnostic" />
+  </Target>
+</Project>

@@ -1,0 +1,7 @@
+﻿bin/
+obj/
+bin.netcore/
+obj.netcore/
+*.user
+*.suo
+.vs/
