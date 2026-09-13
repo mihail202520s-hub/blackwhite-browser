@@ -8,6 +8,38 @@ using CefSharp.WinForms;
 
 namespace CefSharp.MinimalExample.WinForms
 {
+    public class DownloadHandler : IDownloadHandler
+    {
+        public bool CanDownload(IWebBrowser browserControl, IBrowser browser, string url, string requestMethod)
+        {
+            return true;
+        }
+
+        public bool OnBeforeDownload(IWebBrowser browserControl, IBrowser browser, DownloadItem downloadItem, IBeforeDownloadCallback callback)
+        {
+            if (!callback.IsDisposed)
+            {
+                using (callback)
+                {
+                    using (var dialog = new SaveFileDialog())
+                    {
+                        dialog.FileName = downloadItem.SuggestedFileName;
+                        dialog.Filter = "Все файлы (*.*)|*.*";
+                        if (dialog.ShowDialog() == DialogResult.OK)
+                            callback.Continue(dialog.FileName, showDialog: false);
+                    }
+                }
+            }
+            return true;
+        }
+
+        public void OnDownloadUpdated(IWebBrowser browserControl, IBrowser browser, DownloadItem downloadItem, IDownloadItemCallback callback)
+        {
+            if (downloadItem.IsComplete)
+                MessageBox.Show($"Файл сохранён: {downloadItem.FullPath}", "Загрузка завершена", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+    }
+
     public class BrowserForm : Form
     {
         private TabControl tabControl;
@@ -17,7 +49,6 @@ namespace CefSharp.MinimalExample.WinForms
         private Button goButton;
         private bool isDragging = false;
         private Point dragStart;
-        private Rectangle closeButtonRect = Rectangle.Empty;
         private int hoveredCloseIndex = -1;
 
         [DllImport("Gdi32.dll")]
@@ -39,7 +70,6 @@ namespace CefSharp.MinimalExample.WinForms
             StartPosition = FormStartPosition.CenterScreen;
             DoubleBuffered = true;
 
-            // --- Верхняя панель ---
             topPanel = new Panel();
             topPanel.Dock = DockStyle.Top;
             topPanel.Height = 45;
@@ -91,7 +121,6 @@ namespace CefSharp.MinimalExample.WinForms
             topPanel.Controls.Add(maxBtn);
             topPanel.Controls.Add(minBtn);
 
-            // --- Вкладки ---
             tabControl = new TabControl();
             tabControl.Dock = DockStyle.Fill;
             tabControl.Appearance = TabAppearance.Normal;
@@ -119,10 +148,10 @@ namespace CefSharp.MinimalExample.WinForms
 
             var browser = new ChromiumWebBrowser(url);
             browser.Dock = DockStyle.Fill;
+            browser.DownloadHandler = new DownloadHandler();
             browser.TitleChanged += (s, e) =>
             {
-                if (tabControl.SelectedTab == page)
-                    UpdateAddressBar(browser.Address);
+                if (tabControl.SelectedTab == page) UpdateAddressBar(browser.Address);
                 this.Invoke(new Action(() =>
                 {
                     int idx = tabControl.TabPages.IndexOf(page);
@@ -132,8 +161,7 @@ namespace CefSharp.MinimalExample.WinForms
             };
             browser.AddressChanged += (s, e) =>
             {
-                if (tabControl.SelectedTab == page)
-                    UpdateAddressBar(e.Address);
+                if (tabControl.SelectedTab == page) UpdateAddressBar(e.Address);
             };
 
             page.Controls.Add(browser);
@@ -151,10 +179,8 @@ namespace CefSharp.MinimalExample.WinForms
 
         private void UpdateAddressBar(string url)
         {
-            if (addressBar.InvokeRequired)
-                addressBar.Invoke(new Action(() => UpdateAddressBar(url)));
-            else
-                addressBar.Text = url;
+            if (addressBar.InvokeRequired) addressBar.Invoke(new Action(() => UpdateAddressBar(url)));
+            else addressBar.Text = url;
         }
 
         private void Navigate()
@@ -171,29 +197,20 @@ namespace CefSharp.MinimalExample.WinForms
             if (browser != null) UpdateAddressBar(browser.Address);
         }
 
-        // --- Рисование вкладок ---
         private void TabControl_DrawItem(object sender, DrawItemEventArgs e)
         {
             var tab = tabControl.TabPages[e.Index];
             bool selected = (e.Index == tabControl.SelectedIndex);
-
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
 
-            // Фон окна в области вкладок
-            using (var bg = new SolidBrush(Color.Black))
-                g.FillRectangle(bg, e.Bounds);
+            using (var bg = new SolidBrush(Color.Black)) g.FillRectangle(bg, e.Bounds);
 
-            // Скруглённая вкладка
             var tabRect = new Rectangle(e.Bounds.X + 2, e.Bounds.Y + 4, e.Bounds.Width - 6, e.Bounds.Height - 4);
-            int radius = 12;
-            using (var path = RoundedRect(tabRect, radius))
-            {
-                using (var brush = new SolidBrush(selected ? Color.FromArgb(40, 40, 40) : Color.FromArgb(15, 15, 15)))
-                    g.FillPath(brush, path);
-            }
+            using (var path = RoundedRect(tabRect, 12))
+            using (var brush = new SolidBrush(selected ? Color.FromArgb(40, 40, 40) : Color.FromArgb(15, 15, 15)))
+                g.FillPath(brush, path);
 
-            // Текст вкладки
             var textRect = new Rectangle(tabRect.X + 10, tabRect.Y, tabRect.Width - 36, tabRect.Height);
             using (var text = new SolidBrush(selected ? Color.White : Color.Gray))
             {
@@ -201,12 +218,8 @@ namespace CefSharp.MinimalExample.WinForms
                 g.DrawString(tab.Text, e.Font, text, textRect, format);
             }
 
-            // Крестик закрытия
             var closeRect = new Rectangle(tabRect.Right - 24, tabRect.Y + (tabRect.Height - 16) / 2, 16, 16);
-            closeButtonRect = closeRect;
-
-            bool hover = (hoveredCloseIndex == e.Index);
-            using (var closeBg = new SolidBrush(hover ? Color.FromArgb(80, 80, 80) : Color.Transparent))
+            using (var closeBg = new SolidBrush(hoveredCloseIndex == e.Index ? Color.FromArgb(80, 80, 80) : Color.Transparent))
                 g.FillEllipse(closeBg, closeRect);
 
             using (var pen = new Pen(selected ? Color.White : Color.Gray, 1.5f))
@@ -228,18 +241,13 @@ namespace CefSharp.MinimalExample.WinForms
             return path;
         }
 
-        // --- Обработка клика по крестику ---
         private void TabControl_MouseDown(object sender, MouseEventArgs e)
         {
             for (int i = 0; i < tabControl.TabCount; i++)
             {
                 var rect = tabControl.GetTabRect(i);
                 var closeRect = new Rectangle(rect.Right - 26, rect.Y + (rect.Height - 16) / 2 + 4, 16, 16);
-                if (closeRect.Contains(e.Location))
-                {
-                    CloseTab(i);
-                    return;
-                }
+                if (closeRect.Contains(e.Location)) { CloseTab(i); return; }
             }
         }
 
@@ -252,35 +260,20 @@ namespace CefSharp.MinimalExample.WinForms
                 var closeRect = new Rectangle(rect.Right - 26, rect.Y + (rect.Height - 16) / 2 + 4, 16, 16);
                 if (closeRect.Contains(e.Location)) { newHover = i; break; }
             }
-            if (newHover != hoveredCloseIndex)
-            {
-                hoveredCloseIndex = newHover;
-                tabControl.Invalidate();
-            }
+            if (newHover != hoveredCloseIndex) { hoveredCloseIndex = newHover; tabControl.Invalidate(); }
         }
 
         private void CloseTab(int index)
         {
-            if (tabControl.TabPages.Count <= 1) return;
-
+            if (tabControl.TabPages.Count <= 1) { Close(); return; }
             var page = tabControl.TabPages[index];
             foreach (Control c in page.Controls)
-            {
-                if (c is ChromiumWebBrowser browser)
-                {
-                    browser.Dispose();
-                    break;
-                }
-            }
+                if (c is ChromiumWebBrowser browser) { browser.Dispose(); break; }
             tabControl.TabPages.Remove(page);
             page.Dispose();
         }
 
-        protected override void OnResize(EventArgs e)
-        {
-            base.OnResize(e);
-            SetWindowRegion();
-        }
+        protected override void OnResize(EventArgs e) { base.OnResize(e); SetWindowRegion(); }
 
         private void SetWindowRegion()
         {
